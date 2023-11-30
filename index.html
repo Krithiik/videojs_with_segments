@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/video.js/7.11.7/video-js.min.css"
+      rel="stylesheet"
+    />
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/video.js/7.11.7/video.min.js"></script>
+    <script
+      src="https://code.jquery.com/jquery-3.7.1.min.js"
+      integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
+      crossorigin="anonymous"
+    ></script>
+    <script src="https://cdn.jsdelivr.net/npm/videojs-contrib-eme@3.8.0/dist/videojs-contrib-eme.js"></script>
+    <script src="
+https://cdn.jsdelivr.net/npm/videojs-markers@1.0.1/dist/videojs-markers.min.js
+"></script>
+    <link
+      href="
+https://cdn.jsdelivr.net/npm/videojs-markers@1.0.1/dist/videojs.markers.min.css
+"
+      rel="stylesheet"
+    />
+    <style></style>
+    <title>Test VideJS DRM</title>
+  </head>
+  <body>
+    <div style="margin: 50px auto">
+      <video id="my-video" class="video-js"></video>
+      <div id="tooltip" class="vjs-tooltip"></div>
+    </div>
+    <table border="1" id="jsonTable">
+      <thead>
+        <tr>
+          <th>Section</th>
+          <th>Timestamp</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <script>
+      var player = videojs(
+        "my-video",
+        {
+          controls: true,
+          fluid: true,
+          html5: {
+            vhs: {
+              overrideNative: true,
+            },
+          },
+        },
+        function () {
+          var player = this;
+          player.eme();
+          player.src({
+            src: "https://cdn.bitmovin.com/content/assets/art-of-motion_drm/mpds/11331.mpd",
+            type: "application/dash+xml",
+            keySystems: {
+              "com.widevine.alpha":
+                "https://cwip-shaka-proxy.appspot.com/no_auth",
+            },
+          });
+
+          player.ready(function () {
+            player.tech(true).on("keystatuschange", function (event) {
+              console.log("event: ", event);
+            });
+            //add markers to the player on load
+            fetch("data.json")
+              .then((response) => response.json())
+              .then((data) => {
+                console.log(data);
+                data.forEach((item) => {
+                  item.time = convertTimestampToSeconds(item.time);
+                });
+                player.markers({
+                  markerStyle: {
+                    width: "7px",
+                    "border-radius": "30%",
+                    "background-color": "red",
+                  },
+                  markerTip: {
+                    display: true,
+                    text: function (marker) {
+                      return marker.text;
+                    },
+                    time: function (marker) {
+                      return marker.time;
+                    },
+                  },
+                  markers: data,
+                });
+              });
+          });
+        }
+      );
+
+      function displayJSONTable() {
+        // Fetch the JSON file
+        fetch("data.json")
+          .then((response) => response.json())
+          .then((data) => {
+            // Get the table body element
+            var tableBody = document
+              .getElementById("jsonTable")
+              .getElementsByTagName("tbody")[0];
+
+            // Loop through the data and create table rows
+            data.forEach((item) => {
+              var row = tableBody.insertRow();
+
+              // Insert data into the cells
+              var cell1 = row.insertCell(0);
+              cell1.innerHTML = item.text;
+
+              var cell2 = row.insertCell(1);
+              cell2.innerHTML = item.time;
+
+              // Add click event listener to each row
+              row.addEventListener("click", function () {
+                doseek(item.time);
+              });
+            });
+          })
+          .catch((error) => console.error("Error fetching JSON:", error));
+      }
+
+      function convertTimestampToSeconds(timestamp) {
+        // Split the timestamp into hours, minutes, and seconds
+        let hours, minutes, seconds;
+        if (timestamp.split(":").length == 2) {
+          hours = 0;
+          [minutes, seconds] = timestamp.split(":").map(Number);
+        } else {
+          [hours, minutes, seconds] = timestamp.split(":").map(Number);
+        }
+        // Calculate the total seconds
+        const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+
+        return totalSeconds;
+      }
+
+      // Function to handle seek action
+      function doseek(timestamp) {
+        player.currentTime(convertTimestampToSeconds(timestamp));
+        console.log("Seeked to " + timestamp);
+      }
+
+      // Call the function to display the JSON data in the table
+      displayJSONTable();
+
+      const timeTooltip = player
+        .getChild("controlBar")
+        .getChild("progressControl")
+        .getChild("seekBar")
+        .getChild("mouseTimeDisplay")
+        .getChild("timeTooltip");
+
+      timeTooltip.update = function (seekBarRect, seekBarPoint, time) {
+        fetch("data.json")
+          .then((response) => response.json())
+          .then((data) => {
+            data.forEach((item) => {
+              //current timestamp is within a particular item timestamp
+              //   console.log(convertTimestampToSeconds(item.time));
+              //   console.log(convertTimestampToSeconds(`${time}`));
+              if (
+                convertTimestampToSeconds(item.time) <=
+                convertTimestampToSeconds(time)
+              ) {
+                this.write(`${time}\n` + item.text + "\n");
+              }
+            });
+          });
+        this.write(`${time}`);
+      };
+    </script>
+  </body>
+</html>
